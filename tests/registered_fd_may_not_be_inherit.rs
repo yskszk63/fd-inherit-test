@@ -45,8 +45,6 @@ fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
 #[test]
 fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
     let (r, w) = pipe()?;
-    close(w)?;
-    drop(w);
 
     let poll = Poll::new()?;
     poll.registry().register(&mut SourceFd(&r), Token(0), Interest::READABLE | Interest::WRITABLE)?;
@@ -69,6 +67,8 @@ print(os.stat(3))
 
     let ok = child.wait()?.success();
     assert!(ok);
+
+    close(w)?;
 
     drop(poll);
     Ok(())
