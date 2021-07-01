@@ -95,11 +95,13 @@ print(os.stat(3))
         command.pre_exec(move || {
             // CLOEXECを外すためにdup
             let t = dup(rfd)?;
-            println!("{} {}", rfd, t);
+            return Err(io::Error::new(io::ErrorKind::Other, format!("{} {}", rfd, t)));
+            /*
             // pythonがstatする3番目のファイル記述子にセット
             dup2(t, 3)?;
             close(t)?;
             Ok(())
+            */
         });
         let result = command.spawn();
         // pre_execが呼び出されたらAsynFdをdrop
