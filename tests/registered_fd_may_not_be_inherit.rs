@@ -110,7 +110,7 @@ print(os.stat(3))
             Ok(())
         });
         let result = command.spawn();
-        drop(r);
+        close(r)?;
         result
     }?;
 
