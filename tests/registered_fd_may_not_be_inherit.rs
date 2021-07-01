@@ -7,6 +7,7 @@ use std::process::Command;
 use mio::Interest;
 use mio::Poll;
 use mio::Token;
+use mio::Waker;
 use mio::unix::SourceFd;
 
 fn pipe() -> io::Result<(c_int, c_int)> {
@@ -48,6 +49,7 @@ fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
 
     let poll = Poll::new()?;
     poll.registry().register(&mut SourceFd(&r), Token(0), Interest::READABLE | Interest::WRITABLE)?;
+    let waker = Waker::new(poll.registry(), Token(1 << 31))?;
 
     let script = r#"#!/usr/bin/env python3
 import os
@@ -70,6 +72,7 @@ print(os.stat(3))
 
     close(w)?;
 
+    drop(waker);
     drop(poll);
     Ok(())
 }
