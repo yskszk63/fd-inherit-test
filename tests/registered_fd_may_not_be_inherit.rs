@@ -91,10 +91,11 @@ print(os.stat(3))
     let mut child = unsafe {
         // AsyncFdから中で保持しているファイル記述子を取得
         // AsyncFd自体は破棄しない
-        let rfd = dbg!(*r.get_ref());
+        let rfd = *r.get_ref();
         command.pre_exec(move || {
             // CLOEXECを外すためにdup
-            let t = dbg!(dup(rfd)?);
+            let t = dup(rfd)?;
+            println!("{} {}", rfd, t);
             // pythonがstatする3番目のファイル記述子にセット
             dup2(t, 3)?;
             close(t)?;
