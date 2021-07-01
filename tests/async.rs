@@ -60,6 +60,7 @@ fn set_nonblocking(fd: RawFd) -> io::Result<()> {
 async fn test_asynchronous() -> io::Result<()> {
     let script = r#"#!/usr/bin/env python3
 import os, shutil
+print(os.stat(3))
 with os.fdopen(3, 'rb') as r:
     with os.fdopen(4, 'wb') as w:
         shutil.copyfileobj(r, w)
@@ -73,7 +74,6 @@ with os.fdopen(3, 'rb') as r:
 
     set_nonblocking(input.as_raw_fd())?;
     set_nonblocking(output.as_raw_fd())?;
-    println!("OK");
 
     let mut child = unsafe {
         let input = input.as_raw_fd();
