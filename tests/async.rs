@@ -3,6 +3,7 @@ use tokio::io::AsyncWriteExt;
 use std::os::unix::io::AsRawFd;
 use std::io;
 use std::os::unix::io::RawFd;
+use std::os::unix::prelude::IntoRawFd;
 
 use tokio::process::Command;
 
@@ -76,12 +77,17 @@ with os.fdopen(3, 'rb') as r:
     set_blocking(output.as_raw_fd())?;
 
     let mut child = unsafe {
-        let input = input.as_raw_fd();
-        let output = output.as_raw_fd();
-        command.pre_exec(move || {
-            let no_cloexec_input = dup(input)?;
-            let no_cloexec_output = dup(output)?;
+        let input = input.into_raw_fd();
+        let output = output.into_raw_fd();
 
+        // unregister from mio registration
+        let no_cloexec_input = dup(input)?;
+        let no_cloexec_output = dup(output)?;
+
+        close(input)?;
+        close(output)?;
+
+        let child = command.pre_exec(move || {
             dup2(no_cloexec_input, 3)?;
             dup2(no_cloexec_output, 4)?;
 
@@ -89,10 +95,13 @@ with os.fdopen(3, 'rb') as r:
             close(no_cloexec_output)?;
 
             Ok(())
-        }).spawn()?
+        }).spawn();
+
+        close(no_cloexec_input)?;
+        close(no_cloexec_output)?;
+
+        child?
     };
-    drop(input);
-    drop(output);
 
     their_input.write_all(&b"Hello, World!"[..]).await?;
     drop(their_input);
