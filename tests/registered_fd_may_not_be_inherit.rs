@@ -3,14 +3,8 @@ use std::os::raw::c_int;
 use std::os::unix::io::RawFd;
 use std::os::unix::prelude::CommandExt;
 use std::process::Command;
-use std::time::Duration;
 
-use mio::Events;
-use mio::Interest;
-use mio::Poll;
-use mio::Token;
-use mio::Waker;
-use mio::unix::SourceFd;
+use tokio::io::unix::AsyncFd;
 
 fn set_cloexc(fd: RawFd) -> io::Result<()> {
     let flags = unsafe {
@@ -95,14 +89,11 @@ fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-#[test]
-fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
+#[tokio::test]
+async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
     let (r, w) = pipe()?;
 
-    let mut poll = Poll::new()?;
-    poll.registry().register(&mut SourceFd(&r), Token(0), Interest::READABLE | Interest::WRITABLE)?;
-    let waker = Waker::new(poll.registry(), Token(1 << 31))?;
-    poll.poll(&mut Events::with_capacity(1), Some(Duration::from_nanos(0)))?;
+    let r = AsyncFd::new(r)?;
 
     let script = r#"#!/usr/bin/env python3
 import os
@@ -111,6 +102,7 @@ print(os.stat(3))
     let mut command = Command::new("python3");
     command.args(["-c", script]);
     let mut child = unsafe {
+        let r = *r.get_ref();
         command.pre_exec(move || {
             let t = dup(r)?;
             dup2(t, 3)?;
@@ -118,7 +110,7 @@ print(os.stat(3))
             Ok(())
         });
         let result = command.spawn();
-        close(r)?;
+        drop(r);
         result
     }?;
 
@@ -126,8 +118,5 @@ print(os.stat(3))
     assert!(ok);
 
     close(w)?;
-
-    drop(waker);
-    drop(poll);
     Ok(())
 }
