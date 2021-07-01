@@ -41,7 +41,7 @@ fn set_nonblocking(fd: RawFd) -> io::Result<()> {
 }
 
 
-fn pipe() -> io::Result<(c_int, c_int)> {
+fn new_closexec_nonblocking_pipe() -> io::Result<(c_int, c_int)> {
     let mut pair = [0; 2];
     let r = unsafe {
         libc::pipe(pair.as_mut_ptr()) // no CLOEXEC (pipe2 does not exist on mac)
@@ -91,7 +91,8 @@ fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
 
 #[tokio::test]
 async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
-    let (r, w) = pipe()?;
+    // CLOEXEC 
+    let (r, w) = new_closexec_nonblocking_pipe()?;
 
     let r = AsyncFd::new(r)?;
 
