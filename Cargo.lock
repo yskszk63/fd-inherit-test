@@ -25,6 +25,7 @@ name = "fd-inherit-test"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "mio",
  "tokio",
  "tokio-pipe",
 ]
