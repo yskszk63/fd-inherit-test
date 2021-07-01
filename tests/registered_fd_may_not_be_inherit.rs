@@ -24,8 +24,45 @@ fn set_nonblocking(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
+fn set_cloexec(fd: RawFd) -> io::Result<()> {
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_GETFD)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
 
-fn new_nonblocking_pipe() -> io::Result<(c_int, c_int)> {
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_SETFD, r | libc::FD_CLOEXEC)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
+fn set_nocloexec(fd: RawFd) -> io::Result<()> {
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_GETFD)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
+
+    if r & libc::FD_CLOEXEC != 0 {
+        let r = unsafe {
+            libc::fcntl(fd, libc::F_SETFD, r ^ libc::FD_CLOEXEC)
+        };
+        if r == -1 {
+            return Err(io::Error::last_os_error());
+        }
+    }
+
+    Ok(())
+}
+
+fn new_cloexec_nonblocking_pipe() -> io::Result<(c_int, c_int)> {
     let mut pair = [0; 2];
     let r = unsafe {
         libc::pipe(pair.as_mut_ptr()) // no CLOEXEC (pipe2 does not exist on mac)
@@ -35,6 +72,7 @@ fn new_nonblocking_pipe() -> io::Result<(c_int, c_int)> {
     }
 
     for fd in pair {
+        set_cloexec(fd)?;
         set_nonblocking(fd)?;
     }
 
@@ -52,6 +90,7 @@ fn close(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
+/*
 fn dup(fd: RawFd) -> io::Result<RawFd> {
     let r = unsafe {
         libc::dup(fd)
@@ -61,6 +100,7 @@ fn dup(fd: RawFd) -> io::Result<RawFd> {
     }
     Ok(r)
 }
+*/
 
 fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
     let r = unsafe {
@@ -74,8 +114,8 @@ fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
 
 #[tokio::test]
 async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
-    // NONBLOCKINGなパイプを作成 CLOEXECは付与しない
-    let (r, w) = new_nonblocking_pipe()?;
+    // CLOEXEC, NONBLOCKINGなパイプを作成
+    let (r, w) = new_cloexec_nonblocking_pipe()?;
 
     // tokioのI/O Driverに登録
     // Linuxはepoll, Macはkqueue
@@ -86,6 +126,7 @@ async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
 import os
 print(os.stat(3))
 "#;
+
     let mut command = Command::new("python3");
     command.args(["-c", script]);
     let mut child = unsafe {
@@ -93,15 +134,13 @@ print(os.stat(3))
         // AsyncFd自体は破棄しない
         let rfd = *r.get_ref();
         command.pre_exec(move || {
-            // CLOEXECを外すためにdup
-            let t = dup(rfd)?;
-            return Err(io::Error::new(io::ErrorKind::Other, format!("{} {}", rfd, t)));
-            /*
             // pythonがstatする3番目のファイル記述子にセット
-            dup2(t, 3)?;
-            close(t)?;
+            if rfd == 3 {
+                set_nocloexec(rfd)?;
+            } else {
+                dup2(rfd, 3)?;
+            }
             Ok(())
-            */
         });
         let result = command.spawn();
         // pre_execが呼び出されたらAsynFdをdrop
