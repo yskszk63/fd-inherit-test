@@ -91,11 +91,14 @@ fn dup2(fd: RawFd, newfd: RawFd) -> io::Result<()> {
 
 #[tokio::test]
 async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
-    // CLOEXEC 
+    // CLOEXEC, NONBLOCKINGなパイプを作成
     let (r, w) = new_closexec_nonblocking_pipe()?;
 
+    // tokioのI/O Driverに登録
+    // Linuxはepoll, Macはkqueue
     let r = AsyncFd::new(r)?;
 
+    // 3番目のファイル記述子をstatするpythonスクリプト
     let script = r#"#!/usr/bin/env python3
 import os
 print(os.stat(3))
@@ -103,15 +106,20 @@ print(os.stat(3))
     let mut command = Command::new("python3");
     command.args(["-c", script]);
     let mut child = unsafe {
-        let r = *r.get_ref();
+        // AsyncFdから中で保持しているファイル記述子を取得
+        // AsyncFd自体は破棄しない
+        let rfd = *r.get_ref();
         command.pre_exec(move || {
-            let t = dup(r)?;
+            // CLOEXECを外すためにdup
+            let t = dup(rfd)?;
+            // pythonがstatする3番目のファイル記述子にセット
             dup2(t, 3)?;
             close(t)?;
             Ok(())
         });
         let result = command.spawn();
-        close(r)?;
+        // pre_execが呼び出されたらAsynFdをdrop
+        drop(r);
         result
     }?;
 
