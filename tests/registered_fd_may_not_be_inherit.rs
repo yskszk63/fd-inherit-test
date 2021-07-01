@@ -84,7 +84,7 @@ async fn test_registered_fd_mai_not_be_inherit() -> io::Result<()> {
     // 3番目のファイル記述子をstatするpythonスクリプト
     let script = r#"#!/usr/bin/env python3
 import os
-print(os.stat(3))
+print(os.stat(5))
 "#;
     let mut command = Command::new("python3");
     command.args(["-c", script]);
@@ -94,7 +94,7 @@ print(os.stat(3))
         let rfd = *r.get_ref();
         command.pre_exec(move || {
             // pythonがstatする3番目のファイル記述子にセット
-            dup2(rfd, 3)?;
+            dup2(rfd, 5)?;
             Ok(())
         });
         let result = command.spawn();
