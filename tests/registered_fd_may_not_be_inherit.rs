@@ -97,7 +97,7 @@ print(os.stat(3))
             let t = dbg!(dup(rfd)?);
             // pythonがstatする3番目のファイル記述子にセット
             dup2(t, 3)?;
-            //close(t)?;
+            close(t)?;
             Ok(())
         });
         let result = command.spawn();
