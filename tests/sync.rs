@@ -4,6 +4,40 @@ use std::os::raw::c_int;
 use std::process::Command;
 use std::os::unix::process::CommandExt;
 
+fn set_cloexc(fd: RawFd) -> io::Result<()> {
+    let flags = unsafe {
+        libc::fcntl(fd, libc::F_GETFD)
+    };
+    if flags == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::FD_CLOEXEC)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+fn set_nonblocking(fd: RawFd) -> io::Result<()> {
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_GETFL)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
+
+    let r = unsafe {
+        libc::fcntl(fd, libc::F_SETFL, r | libc::O_NONBLOCK)
+    };
+    if r == -1 {
+        return Err(io::Error::last_os_error());
+    }
+
+    Ok(())
+}
+
 fn pipe() -> io::Result<(c_int, c_int)> {
     let mut pair = [0; 2];
     let r = unsafe {
@@ -13,6 +47,11 @@ fn pipe() -> io::Result<(c_int, c_int)> {
         return Err(io::Error::last_os_error());
     }
     let [r, w] = pair;
+
+    for fd in pair {
+        set_cloexc(fd)?;
+        set_nonblocking(fd)?;
+    }
 
     Ok((r, w))
 }
@@ -54,7 +93,11 @@ fn write_all(fd: RawFd, buf: &[u8]) -> io::Result<()> {
             libc::write(fd, buf.as_ptr() as *const _, n)
         };
         if r == -1 {
-            return Err(io::Error::last_os_error());
+            let err = io::Error::last_os_error();
+            if err.kind() != io::ErrorKind::WouldBlock {
+                return Err(err);
+            }
+            continue;
         }
         n -= r as usize;
     }
@@ -68,7 +111,11 @@ fn read_to_end(fd: RawFd, buf: &mut Vec<u8>) -> io::Result<()> {
             libc::read(fd, b.as_mut_ptr() as *mut _, b.len())
         };
         if r == -1 {
-            return Err(io::Error::last_os_error());
+            let err = io::Error::last_os_error();
+            if err.kind() != io::ErrorKind::WouldBlock {
+                return Err(err);
+            }
+            continue;
         }
         if r == 0 {
             return Ok(())

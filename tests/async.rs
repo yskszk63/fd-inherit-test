@@ -36,7 +36,7 @@ fn close(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-fn set_nonblocking(fd: RawFd) -> io::Result<()> {
+fn set_blocking(fd: RawFd) -> io::Result<()> {
     let r = unsafe {
         libc::fcntl(fd, libc::F_GETFL)
     };
@@ -72,8 +72,8 @@ with os.fdopen(3, 'rb') as r:
     let mut command = Command::new("python3");
     command.args(["-c", script]);
 
-    set_nonblocking(input.as_raw_fd())?;
-    set_nonblocking(output.as_raw_fd())?;
+    set_blocking(input.as_raw_fd())?;
+    set_blocking(output.as_raw_fd())?;
 
     let mut child = unsafe {
         let input = input.as_raw_fd();
