@@ -7,7 +7,7 @@ use std::os::unix::process::CommandExt;
 fn pipe() -> io::Result<(c_int, c_int)> {
     let mut pair = [0; 2];
     let r = unsafe {
-        libc::pipe2(pair.as_mut_ptr(), 0) // no CLOEXEC
+        libc::pipe(pair.as_mut_ptr()) // no CLOEXEC (pipe2 does not exist on mac)
     };
     if r == -1 {
         return Err(io::Error::last_os_error());
